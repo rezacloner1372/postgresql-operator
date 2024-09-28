@@ -47,12 +47,18 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Set the Initial status to ready: false if it's not already set
-	if postgres.Status.Ready {
-		postgres.Status.Ready = false
+	if !postgres.Status.Ready {
+		postgres.Status.Ready = true
+		// Re-fetch the latest version of the Postgres object before updating the status
+		if err := r.Get(ctx, req.NamespacedName, &postgres); err != nil {
+			logger.Error(err, "unable to fetch Postgres to update status")
+			return ctrl.Result{}, err
+		}
 		if err := r.Status().Update(ctx, &postgres); err != nil {
 			logger.Error(err, "unable to update Postgres status")
 			return ctrl.Result{}, err
 		}
+		logger.Info("Postgres resource is ready", "Postgres.Name", postgres.Name)
 	}
 
 	// Fetch the refrenced secret for db credentials
@@ -122,7 +128,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// 6. Check if the StatefulSet is ready
 	if statefulset.Status.ReadyReplicas != *statefulset.Spec.Replicas {
 		logger.Info("StatefulSet is not ready yet", "StatefulSet.Name", statefulset.Name)
-		return ctrl.Result{RequeueAfter: 5}, nil // Requeue after 5 seconds
+		postgres.Status.Ready = false
+		if err := r.Status().Update(ctx, &postgres); err != nil {
+			logger.Error(err, "unable to update Postgres status")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 5}, nil // Requeue after a short delay
 	}
 
 	// Update the status to ready: true
