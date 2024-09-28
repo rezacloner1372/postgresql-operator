@@ -74,6 +74,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if errors.IsNotFound(err) {
 			// Define a new StatefulSet
 			sts := r.statefulSetForPostgres(&postgres, &secret)
+
+			// Set the Postgres instance as the owner and controller of the StatefulSet
+			if err := ctrl.SetControllerReference(&postgres, sts, r.Scheme); err != nil {
+				logger.Error(err, "Failed to set owner reference on StatefulSet")
+				return ctrl.Result{}, err
+			}
+
 			logger.Info("Creating a new StatefulSet", "StatefulSet.Namespace", sts.Namespace, "StatefulSet.Name", sts.Name)
 			if err := r.Create(ctx, sts); err != nil {
 				logger.Error(err, "Failed to create new StatefulSet", "StatefulSet.Namespace", sts.Namespace, "StatefulSet.Name", sts.Name)
@@ -94,6 +101,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new Service
 		svc := r.serviceForPostgres(&postgres)
+
+		// Set the Postgres instance as the owner and controller of the StatefulSet
+		if err := ctrl.SetControllerReference(&postgres, svc, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set owner reference on Service")
+			return ctrl.Result{}, err
+		}
 		logger.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
 		if err := r.Create(ctx, svc); err != nil {
 			logger.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
@@ -129,10 +142,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresv1alpha1.Postgres{}).
+		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
 
-// statefulSetForPostgres returns a StatefulSet object that will be created
+// Helper function statefulSetForPostgres returns a StatefulSet object that will be created
 func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgres, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := map[string]string{
 		"app": pg.Name,
@@ -217,7 +232,7 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 	}
 }
 
-// serviceForPostgres returns a Service object to expose the Postgres
+// Helper function serviceForPostgres returns a Service object to expose the Postgres
 func (r *PostgresReconciler) serviceForPostgres(pg *postgresv1alpha1.Postgres) *corev1.Service {
 	labels := map[string]string{
 		"app": pg.Name,
