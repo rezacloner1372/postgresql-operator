@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - postgres.snappcloud.io
+  resources:
+  - postgres
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgres.snappcloud.io
+  resources:
+  - postgres/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgres.snappcloud.io
+  resources:
+  - postgres/status
+  verbs:
+  - get
+  - patch
+  - update

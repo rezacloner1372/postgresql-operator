@@ -1,0 +1,17 @@
+apiVersion: postgres.snappcloud.io/v1alpha1
+kind: Postgres
+metadata:
+  labels:
+    app.kubernetes.io/name: postgresql-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mypostgres
+spec:
+  version: "13" # Example: "13"
+  persistence:
+    size: "1Gi" # Example: "1Gi"
+  auth:
+    database: "postgres" # Example: "postgres"
+    secretRef: "credentials" # Reference to pre-existing secret containing
+status:
+  ready: flase # Indicates readiness status
+  
