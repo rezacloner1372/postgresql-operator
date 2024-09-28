@@ -11,19 +11,24 @@ type PostgresSpec struct {
 	Auth        Auth        `json:"auth"`
 }
 
-
 type Persistence struct {
 	Size string `json:"size"`
 }
 
 type Auth struct {
-	Databse string `json:"database"`
+	Databse   string `json:"database"`
 	SecretRef string `json:"secretRef"`
 }
+
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+
 type PostgresStatus struct {
 	Ready bool `json:"ready"`
 }
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 type Postgres struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -32,6 +37,7 @@ type Postgres struct {
 	Status PostgresStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:object:root=true
 type PostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
