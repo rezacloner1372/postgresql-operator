@@ -16,12 +16,9 @@ type Persistence struct {
 }
 
 type Auth struct {
-	Databse   string `json:"database"`
+	Database  string `json:"database"`
 	SecretRef string `json:"secretRef"`
 }
-
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
 
 type PostgresStatus struct {
 	Ready bool `json:"ready"`

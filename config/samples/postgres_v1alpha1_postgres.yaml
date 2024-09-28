@@ -14,4 +14,3 @@ spec:
     secretRef: "credentials" # Reference to pre-existing secret containing
 status:
   ready: flase # Indicates readiness status
-  

@@ -47,7 +47,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Set the Initial status to ready: false if it's not already set
-	if postgres.Status.Ready != false {
+	if postgres.Status.Ready {
 		postgres.Status.Ready = false
 		if err := r.Status().Update(ctx, &postgres); err != nil {
 			logger.Error(err, "unable to update Postgres status")
@@ -154,6 +154,19 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 	}
 	replicas := int32(1)
 
+	initContainers := []corev1.Container{{
+		Name:  "init-pg-hba",
+		Image: "busybox",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			"sed -i 's/trust/md5/g' /var/lib/postgresql/data/pg_hba.conf && echo 'host all all all md5' >> /var/lib/postgresql/data/pg_hba.conf",
+		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      "data",
+			MountPath: "/var/lib/postgresql/data",
+		}},
+	}}
 	return &appsv1.StatefulSet{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name:      pg.Name,
@@ -171,6 +184,7 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: initContainers,
 					Containers: []corev1.Container{{
 						Name:  "postgresql",
 						Image: "postgres:" + pg.Spec.Version,
@@ -185,7 +199,7 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 						Env: []corev1.EnvVar{
 							{
 								Name:  "POSTGRES_DB",
-								Value: pg.Spec.Auth.Databse,
+								Value: pg.Spec.Auth.Database,
 							},
 							{
 								Name: "POSTGRES_USER",
