@@ -5,5 +5,5 @@ metadata:
 type: Opaque
 stringData:
   username: postgres
-  password: mypass
+  password: mypassword
   

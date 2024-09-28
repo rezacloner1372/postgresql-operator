@@ -111,6 +111,9 @@ Before you begin, ensure you have the following installed:
     username: postgres
     password: mypassword
    ```
+
+let's apply the secret:
+
    ```bash
    kubectl apply -f credentials.yaml -n postgres-operator
    ```
@@ -139,7 +142,7 @@ Before you begin, ensure you have the following installed:
 To clean up the resources created during testing, run:
 # I used SetupWithManager function to watch for the resources your operator owns, ensuring that any changes to the StatefulSet or Service trigger reconciliation. To ensure Kubernetes garbage collection works correctly (i.e., deleting the Postgres CR deletes associated resources), set owner references when creating the StatefulSet and Service. Modify the helper functions to include owner references.
 
-``` bash
+```bash
     // In statefulSetForPostgres
     sts := &appsv1.StatefulSet{
         // ... existing code ...
