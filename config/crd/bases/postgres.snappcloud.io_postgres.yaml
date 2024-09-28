@@ -17,7 +17,6 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Postgres is the Schema for the postgres API
         properties:
           apiVersion:
             description: |-
@@ -37,18 +36,38 @@ spec:
           metadata:
             type: object
           spec:
-            description: PostgresSpec defines the desired state of Postgres
             properties:
-              foo:
-                description: Foo is an example field of Postgres. Edit postgres_types.go
-                  to remove/update
+              auth:
+                properties:
+                  database:
+                    type: string
+                  secretRef:
+                    type: string
+                required:
+                - database
+                - secretRef
+                type: object
+              persistence:
+                properties:
+                  size:
+                    type: string
+                required:
+                - size
+                type: object
+              version:
                 type: string
+            required:
+            - auth
+            - persistence
+            - version
             type: object
           status:
-            description: PostgresStatus defines the observed state of Postgres
+            properties:
+              ready:
+                type: boolean
+            required:
+            - ready
             type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
