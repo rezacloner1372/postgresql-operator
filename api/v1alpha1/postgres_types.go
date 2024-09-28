@@ -6,10 +6,22 @@ import (
 )
 
 type PostgresSpec struct {
-	Foo string `json:"foo,omitempty"`
+	Version     string      `json:"version"`
+	Persistence Persistence `json:"persistence"`
+	Auth        Auth        `json:"auth"`
 }
 
+
+type Persistence struct {
+	Size string `json:"size"`
+}
+
+type Auth struct {
+	Databse string `json:"database"`
+	SecretRef string `json:"secretRef"`
+}
 type PostgresStatus struct {
+	Ready bool `json:"ready"`
 }
 
 type Postgres struct {
