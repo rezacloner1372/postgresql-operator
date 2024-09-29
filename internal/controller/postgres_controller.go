@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,28 +38,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	var postgres postgresv1alpha1.Postgres
 	if err := r.Get(ctx, req.NamespacedName, &postgres); err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.Dont requeue.
 			logger.Info("Postgres resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		/// Error reading the object - requeue the request.
 		logger.Error(err, "unable to fetch Postgres")
 		return ctrl.Result{}, err
-	}
-
-	// Set the Initial status to ready: false if it's not already set
-	if !postgres.Status.Ready {
-		postgres.Status.Ready = true
-		// Re-fetch the latest version of the Postgres object before updating the status
-		if err := r.Get(ctx, req.NamespacedName, &postgres); err != nil {
-			logger.Error(err, "unable to fetch Postgres to update status")
-			return ctrl.Result{}, err
-		}
-		if err := r.Status().Update(ctx, &postgres); err != nil {
-			logger.Error(err, "unable to update Postgres status")
-			return ctrl.Result{}, err
-		}
-		logger.Info("Postgres resource is ready", "Postgres.Name", postgres.Name)
 	}
 
 	// Fetch the refrenced secret for db credentials
@@ -69,7 +53,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		logger.Error(err, "Failed to get Secret", "Secret", postgres.Spec.Auth.SecretRef)
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the statefulset is existing
@@ -125,18 +109,21 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// 6. Check if the StatefulSet is ready
+	// Check if the StatefulSet is ready
 	if statefulset.Status.ReadyReplicas != *statefulset.Spec.Replicas {
-		logger.Info("StatefulSet is not ready yet", "StatefulSet.Name", statefulset.Name)
-		postgres.Status.Ready = false
-		if err := r.Status().Update(ctx, &postgres); err != nil {
-			logger.Error(err, "unable to update Postgres status")
-			return ctrl.Result{}, err
+		if postgres.Status.Ready {
+			postgres.Status.Ready = false
+
+			if err := r.Status().Update(ctx, &postgres); err != nil {
+				logger.Error(err, "unable to update Postgres status")
+				return ctrl.Result{}, err
+			}
 		}
-		return ctrl.Result{RequeueAfter: 5}, nil // Requeue after a short delay
+		logger.Info("StatefulSet is not ready yet", "StatefulSet.Name", statefulset.Name)
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil // allows the operator to requeue after 5.
 	}
 
-	// Update the status to ready: true
+	// If StatefulSet is ready, ensure Postgres Ready status is true
 	if !postgres.Status.Ready {
 		postgres.Status.Ready = true
 		if err := r.Status().Update(ctx, &postgres); err != nil {
