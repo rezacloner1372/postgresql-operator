@@ -45,6 +45,31 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
+	// Check if the resource is being deleted
+	if !postgres.ObjectMeta.DeletionTimestamp.IsZero() {
+		if containsString(postgres.ObjectMeta.Finalizers, "postgres.finalizer") {
+			if err := r.finalizerPostgres(&postgres); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// Remove finalizer after cleanup
+			postgres.ObjectMeta.Finalizers = removeString(postgres.ObjectMeta.Finalizers, "postgres.finalizer")
+			if err := r.Update(ctx, &postgres); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+
+	}
+
+	// Add finalizer if not exist
+	if !containsString(postgres.ObjectMeta.Finalizers, "postgres.finalizer") {
+		postgres.ObjectMeta.Finalizers = append(postgres.ObjectMeta.Finalizers, "postgres.finalizer")
+		if err := r.Update(ctx, &postgres); err != nil {
+			return ctrl.Result{}, nil
+		}
+	}
+
 	// Fetch the refrenced secret for db credentials
 	var secret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: postgres.Spec.Auth.SecretRef, Namespace: req.Namespace}, &secret); err != nil {
@@ -152,19 +177,6 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 	}
 	replicas := int32(1)
 
-	initContainers := []corev1.Container{{
-		Name:  "init-pg-hba",
-		Image: "busybox",
-		Command: []string{
-			"/bin/sh",
-			"-c",
-			"sed -i 's/trust/md5/g' /var/lib/postgresql/data/pg_hba.conf && echo 'host all all all md5' >> /var/lib/postgresql/data/pg_hba.conf",
-		},
-		VolumeMounts: []corev1.VolumeMount{{
-			Name:      "data",
-			MountPath: "/var/lib/postgresql/data",
-		}},
-	}}
 	return &appsv1.StatefulSet{
 		ObjectMeta: ctrl.ObjectMeta{
 			Name:      pg.Name,
@@ -182,7 +194,6 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: initContainers,
 					Containers: []corev1.Container{{
 						Name:  "postgresql",
 						Image: "postgres:" + pg.Spec.Version,
@@ -218,6 +229,17 @@ func (r *PostgresReconciler) statefulSetForPostgres(pg *postgresv1alpha1.Postgre
 											Name: pg.Spec.Auth.SecretRef,
 										},
 										Key: "password",
+									},
+								},
+							},
+						},
+						Lifecycle: &corev1.Lifecycle{
+							PostStart: &corev1.LifecycleHandler{
+								Exec: &corev1.ExecAction{
+									Command: []string{
+										"/bin/sh",
+										"-c",
+										"sed -i 's/trust/md5/g' /var/lib/postgresql/data/pg_hba.conf && echo 'host all all all md5' >> /var/lib/postgresql/data/pg_hba.conf",
 									},
 								},
 							},
@@ -266,4 +288,46 @@ func (r *PostgresReconciler) serviceForPostgres(pg *postgresv1alpha1.Postgres) *
 			Type:     corev1.ServiceTypeClusterIP,
 		},
 	}
+}
+
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(slice []string, s string) []string {
+	var result []string
+	for _, item := range slice {
+		if item != s {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func (r *PostgresReconciler) finalizerPostgres(postgres *postgresv1alpha1.Postgres) error {
+	statefulsetName := postgres.Name
+	var statefulset appsv1.StatefulSet
+	err := r.Get(context.TODO(), types.NamespacedName{Name: statefulsetName, Namespace: postgres.Namespace}, &statefulset)
+	if err == nil {
+		if err := r.Delete(context.TODO(), &statefulset); err != nil {
+			return err
+		}
+	}
+	log.Log.Info("Finalizer cleanup started for Postgres", "Postgres.Name", postgres.Name)
+	time.Sleep(10 * time.Second)
+	
+	serviceName := "postgres-service"
+	var service corev1.Service
+	err = r.Get(context.TODO(), types.NamespacedName{Name: serviceName, Namespace: postgres.Namespace}, &service)
+	if err == nil {
+		if err := r.Delete(context.TODO(), &service); err != nil {
+			return err
+		}
+	}
+	return nil
 }
