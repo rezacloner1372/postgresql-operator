@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,7 +38,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Fetch the Postgres instance
 	var postgres postgresv1alpha1.Postgres
 	if err := r.Get(ctx, req.NamespacedName, &postgres); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("Postgres resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
@@ -320,7 +321,7 @@ func (r *PostgresReconciler) finalizerPostgres(postgres *postgresv1alpha1.Postgr
 	}
 	log.Log.Info("Finalizer cleanup started for Postgres", "Postgres.Name", postgres.Name)
 	time.Sleep(10 * time.Second)
-	
+
 	serviceName := "postgres-service"
 	var service corev1.Service
 	err = r.Get(context.TODO(), types.NamespacedName{Name: serviceName, Namespace: postgres.Namespace}, &service)
