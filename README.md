@@ -7,8 +7,7 @@ This repository contains a Kubernetes operator for managing PostgreSQL instances
 - [Installation](#installation)
 - [Deploying the Operator](#deploying-the-operator)
 - [Testing the Operator](#testing-the-operator)
-- [Cleaning Up](#cleaning-up)
-- [License](#license)
+- [Clean Up Test(Finalizer)](#Finalizer)
 
 ## Prerequisites
 
@@ -100,19 +99,17 @@ Before you begin, ensure you have the following installed:
    ```
 
 2. **Create a Secret for Database Credentials**
-   Create a Kubernetes Secret with the database password:
-
    ```yaml
-  apiVersion: v1
+    apiVersion: v1
     kind: Secret
     metadata:
-    name: credentials
+      name: credentials
     type: Opaque
     stringData:
-    username: postgres
-    password: mypassword
+      username: postgres
+      password: mypassword
    ```
-   Lets apply the secret:
+  
    ```bash
    kubectl apply -f credentials.yaml -n postgres-operator
    ```
@@ -237,3 +234,5 @@ Before you begin, ensure you have the following installed:
     }
     return svc
 ```
+---------
+#### Feel free to Developed this Operator. You can Add A feature in the operator logic to automatically update the Postgres database password in response to changes in the user-provided secret.
