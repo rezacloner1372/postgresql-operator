@@ -117,34 +117,107 @@ Before you begin, ensure you have the following installed:
    kubectl apply -f credentials.yaml -n postgres-operator
    ```
 
-3. **Apply the Custom Resource**
-   Apply the PostgreSQL custom resource to the cluster:
+3. **Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects**
    ```bash
-   kubectl apply -f postgres.yaml -n postgres-operator
+   make manifests
    ```
-
-4. **Verify the StatefulSet and Service are Created**
+4. **Apply the Custom Resource**
+   ```bash
+   kubectl apply -f postgresql-operator/config/crd/bases/postgres.snappcloud.io_postgres.yaml
+   ```
+5. **Run controller from your host**
+   ```bash
+   make run
+   ```
+6. **Apply Kind Postgres**
+   ```bash
+   kubectl apply -f postgresql-operator/config/samples/postgres_v1alpha1_postgres.yaml
+   ```
+7. **Verify the StatefulSet and Service are Created**
    Check the created StatefulSet and Service:
    ```bash
    kubectl get statefulsets -n postgres-operator
    kubectl get services -n postgres-operator
    ```
-
-5. **Access the PostgreSQL Pod**
+8. **Access the PostgreSQL Pod**
    You can access the PostgreSQL pod using:
    ```bash
    kubectl exec -it my-postgres-0 -n postgres-operator -- psql -U postgres
    ```
 
-## Cleaning Up
+## Clean Up Test(Finalizer)
+   Finalizers in Kubernetes are used to delay the deletion of resources until the controller performs specific cleanup tasks. 
+   For example, We define a finalizer on our Postgres resource, the Kubernetes API won’t delete the resource immediately when you issue a delete command. Instead, it will mark the resource for deletion (by setting the deletionTimestamp), and the resource will remain in a "terminating" state until the controller handles the cleanup logic (such as deleting related StatefulSets, Services, Secrets, or other resources the Postgres instance owns). Once the controller completes the cleanup, it removes the finalizer from the resource, allowing Kubernetes to complete the deletion.
 
-To clean up the resources created during testing, run:
- I used SetupWithManager function to watch for the resources your operator owns, ensuring that any changes to the StatefulSet or Service trigger reconciliation. To ensure Kubernetes garbage collection works correctly (i.e., deleting the Postgres CR deletes associated resources), set owner references when creating the StatefulSet and Service. Modify the helper functions to include owner references.
+
+   To verify that our finalizer logic works correctly,follow a step-by-step approach. 
+   Here's how you can ensure that the finalizer performs as expected:
+
+   1. **Check Finalizer is Set on Creation**
+   Ensure that when the PostgreSQL custom resource (CR) is created, the finalizer is added to the resource. You can do this by inspecting the *metadata.finalizers* field in the resource.
+
+   After Create a Postgres CR, inspect its metadata using:
+   ```bash
+   kubectl get postgres <postgres-name> -o yaml
+   ```
+   Look for the *metadata.finalizers* field. It should have the value you specified (e.g., finalizer.postgres.snappcloud.io).
+   
+   2. **Simulate Resource Deletion**
+   To test the finalizer in action, attempt to delete the Postgres CR and observe whether Kubernetes waits for the finalizer's logic to execute before fully deleting the resource.
+
+   Delete the Postgres CR:
+
+   ```bash
+   kubectl delete postgres <postgres-name>
+   ```
+
+   When you issue this command, Kubernetes will set the *deletionTimestamp* but won't delete the resource until the finalizer is removed.
+
+   Check the Resource Status:
+
+   ```bash
+   kubectl get postgres <postgres-name> -o yaml
+   ```
+
+   Look for the *metadata.deletionTimestamp* field. The resource should be in a *"Terminating"* state, and Kubernetes will not remove it until the finalizer logic runs and clears the finalizers field.
+
+   3. **Ensure Cleanup Logic Executes**
+   Check that the finalizePostgres function is correctly cleaning up associated resources (e.g., StatefulSet, Service) before the resource is deleted.
+
+   Verify StatefulSet and Service Deletion: After the Postgres resource enters the "Terminating" state, the operator should execute the cleanup logic. Check if the StatefulSet and Service associated with the Postgres CR are deleted by running:
+
+   ```bash
+   kubectl get statefulset <postgres-name>
+   kubectl get svc postgres-service
+   ```
+
+   These should no longer exist if the cleanup was successful.
+
+   4. **Ensure Finalizer is Removed**
+   After the cleanup logic in finalizePostgres runs, ensure the finalizer is removed from the Postgres resource.
+
+   Check Finalizer Removal: The finalizer should be removed from the metadata.finalizers field after the cleanup completes. Check this using:
+   ```bash
+   kubectl get postgres <postgres-name> -o yaml
+   ```
+   The finalizers field should now be empty, and Kubernetes will proceed to delete the Postgres CR.
+
+   5. **Verify Deletion Completes**
+   Finally, check that the Postgres CR itself is fully deleted after the finalizer logic completes.
+   Check Postgres CR Deletion: Ensure the Postgres CR is no longer in the cluster:
+   ```bash
+   kubectl get postgres <postgres-name>
+   ```
+
+   You should see "NotFound" if the deletion process was successful.
+
+## SetupWithManager
+ I used SetupWithManager function to watch for the resources operator owns, ensuring that any changes to the StatefulSet or Service trigger reconciliation. To ensure Kubernetes garbage collection works correctly (i.e., deleting the Postgres CR deletes associated resources), set owner references when creating the StatefulSet and Service. Modify the helper functions to include owner references.
 
 ```bash
     // In statefulSetForPostgres
     sts := &appsv1.StatefulSet{
-        // ... existing code ...
+        // ...code ...
     }
     // Set Postgres instance as the owner and controller
     if err := ctrl.SetControllerReference(pg, sts, r.Scheme); err != nil {
@@ -155,7 +228,7 @@ To clean up the resources created during testing, run:
 
     // In serviceForPostgres
     svc := &corev1.Service{
-        // ... existing code ...
+        // ...code ...
     }
     // Set Postgres instance as the owner and controller
     if err := ctrl.SetControllerReference(pg, svc, r.Scheme); err != nil {
